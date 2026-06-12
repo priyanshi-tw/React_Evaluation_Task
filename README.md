@@ -252,7 +252,3 @@ Enter
 Or simply click on a command with the mouse.
 
 ---
-
-## License
-
-This project is open source and available under the MIT License.
