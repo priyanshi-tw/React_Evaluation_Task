@@ -1,62 +1,101 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import SearchResults from "./SearchResults";
 import { searchCommands, type Command } from "./commands";
+import { useDebounce } from "./useDebounce";
 
 export default function CommandPallete() {
   const [search, setSearch] = useState<string>("");
+  const debouncedSearch = useDebounce(search, 500);
   const [data, setData] = useState<Command[]>();
   const [open, setOpen] = useState<boolean>(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearch(event.target.value);
     setOpen(true);
-    getCommandsData(event.target.value);
+    setIsLoading(true);
   };
 
-  const getCommandsData = async (search: string) => {
+  const getCommandsData = useCallback(async (search: string) => {
+    setIsLoading(true);
     try {
       const data = await searchCommands(search);
       setData(data);
+      setHighlightedIndex(-1);
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const keyDownHandler = (event: KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === "k") {
-      setOpen(true);
-      getCommandsData("");
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener("keydown", keyDownHandler);
-    return () => {
-      window.removeEventListener("keydown", keyDownHandler);
-    };
-  });
-
-  useEffect(() => {
-    function handleEscapeKey(event: KeyboardEvent) {
-      if (event.code === "Escape") {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("keydown", handleEscapeKey);
-    return () => document.removeEventListener("keydown", handleEscapeKey);
   }, []);
 
+  useEffect(() => {
+    getCommandsData(debouncedSearch);
+  }, [debouncedSearch, getCommandsData]);
+
+  useEffect(() => {
+    const keyDownHandler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "k") {
+        setOpen(true);
+        getCommandsData("");
+      }
+
+      if (!open) return;
+
+      if (event.key === "Escape") {
+        setOpen(false);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setHighlightedIndex((prev) =>
+          Math.min(prev + 1, (data?.length ?? 1) - 1),
+        );
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlightedIndex((prev) => Math.max(prev - 1, 0));
+      } else if (event.key === "Enter" && highlightedIndex >= 0 && data) {
+        data[highlightedIndex].action();
+        setOpen(false);
+        setSearch("");
+      }
+    };
+
+    window.addEventListener("keydown", keyDownHandler);
+    return () => window.removeEventListener("keydown", keyDownHandler);
+  }, [open, data, highlightedIndex, getCommandsData]);
   return (
-    <>
+    <div className="relative w-140">
       <input
         type="text"
-        placeholder="Search..."
-        className="border border-gray-300 w-100 rounded-[10px] px-2 py-2 focus:border-blue-300 focus-visible:outline-none "
+        placeholder="⌘ Search commands..."
+        className="border border-gray-200 w-full rounded-xl px-4 py-3 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
         value={search}
         onChange={handleSearchChange}
       />
-      {open && <SearchResults data={data || []} />}{" "}
-    </>
+
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => {
+              setOpen(false);
+              setSearch("");
+            }}
+          />
+          <div className="absolute top-full left-0 z-50 mt-1 w-full">
+            <SearchResults
+              data={data || []}
+              highlightedIndex={highlightedIndex}
+              isLoading={isLoading}
+              onExecute={() => {
+                setOpen(false);
+                setSearch("");
+              }}
+            />
+          </div>
+        </>
+      )}
+    </div>
   );
 }

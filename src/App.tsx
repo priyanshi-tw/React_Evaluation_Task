@@ -4,7 +4,7 @@ import CommandPallete from "./components/CommadPallete";
 function App() {
   return (
     <>
-      <div id="center">
+      <div className="flex justify-center my-6">
         <CommandPallete />
       </div>
     </>
